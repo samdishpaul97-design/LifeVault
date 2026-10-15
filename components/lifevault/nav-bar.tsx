@@ -1,12 +1,13 @@
 "use client"
 
-import { Compass, Map, User, type LucideIcon } from "lucide-react"
+import { Compass, Globe, Map, User, type LucideIcon } from "lucide-react"
 
-export type TabId = "discover" | "tours" | "profile"
+export type TabId = "discover" | "tours" | "map" | "profile"
 
 const TABS: { id: TabId; label: string; short: string; icon: LucideIcon }[] = [
   { id: "discover", label: "Discover", short: "Discover", icon: Compass },
   { id: "tours", label: "Our Tours", short: "Tours", icon: Map },
+  { id: "map", label: "Map", short: "Map", icon: Globe },
   { id: "profile", label: "Profile", short: "Profile", icon: User },
 ]
 

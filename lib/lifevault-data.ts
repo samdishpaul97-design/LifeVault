@@ -15,6 +15,7 @@ export interface TourSpot {
   mustTryLabel?: string
   stickers?: string[]
   rotation?: number
+  createdAt?: string
 }
 
 export interface Tour {

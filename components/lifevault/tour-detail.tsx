@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Image from "next/image"
-import { ArrowLeft, Check, MapPin, Plus, Sparkles, Star } from "lucide-react"
+import { ArrowLeft, Check, MapPin, Plus, Sparkles, Star, Trash2 } from "lucide-react"
 import { tourAccents, type Tour, type TourSpot } from "@/lib/lifevault-data"
 
 interface TourDetailProps {
@@ -10,6 +10,7 @@ interface TourDetailProps {
   onBack: () => void
   onToggleSpot: (spotId: string) => void
   onAddSpot: () => void
+  onDeleteSpot: (spotId: string, name: string) => void
   onCelebrate: (name: string) => void
 }
 
@@ -18,6 +19,7 @@ export function TourDetail({
   onBack,
   onToggleSpot,
   onAddSpot,
+  onDeleteSpot,
   onCelebrate,
 }: TourDetailProps) {
   const accent = tourAccents[tour.accent]
@@ -100,6 +102,7 @@ export function TourDetail({
                 spot={s}
                 accentText={accent.text}
                 onToggle={onToggleSpot}
+                onDelete={onDeleteSpot}
                 onCelebrate={onCelebrate}
               />
             ))}
@@ -137,6 +140,7 @@ export function TourDetail({
                 index={i}
                 accentText={accent.text}
                 onToggle={onToggleSpot}
+                onDelete={onDeleteSpot}
               />
             ))}
           </div>
@@ -154,11 +158,13 @@ function SpotRow({
   spot,
   accentText,
   onToggle,
+  onDelete,
   onCelebrate,
 }: {
   spot: TourSpot
   accentText: string
   onToggle: (id: string) => void
+  onDelete: (id: string, name: string) => void
   onCelebrate: (name: string) => void
 }) {
   const [burst, setBurst] = useState(false)
@@ -196,6 +202,17 @@ function SpotRow({
           +{spot.xp}
           <span className="ml-0.5 text-[0.65rem] font-bold">XP</span>
         </span>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm(`Delete "${spot.name}" from the vault?`)) onDelete(spot.id, spot.name)
+          }}
+          aria-label={`Delete ${spot.name}`}
+          className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-terracotta/10 hover:text-terracotta"
+        >
+          <Trash2 className="size-4" />
+        </button>
       </div>
     </li>
   )
@@ -205,19 +222,30 @@ function ScrapbookCard({
   spot,
   index,
   onToggle,
+  onDelete,
 }: {
   spot: TourSpot
   index: number
   accentText: string
   onToggle: (id: string) => void
+  onDelete: (id: string, name: string) => void
 }) {
   const hasScores = spot.samScore != null && spot.priyaScore != null
+  const loggedOn = formatLoggedAt(spot.createdAt)
 
   return (
     <article
-      className="animate-float-in relative rounded-2xl border border-border bg-cream p-3 shadow-xl shadow-black/30"
+      className="group animate-float-in relative rounded-2xl border border-border bg-cream p-3 shadow-xl shadow-black/30"
       style={{ transform: `rotate(${spot.rotation ?? 0}deg)` }}
     >
+      <button
+        type="button"
+        onClick={() => onDelete(spot.id, spot.name)}
+        aria-label={`Delete ${spot.name}`}
+        className="absolute right-2 top-2 z-10 grid size-8 place-items-center rounded-full text-vault-bg/40 opacity-0 transition-opacity hover:bg-vault-bg/5 hover:text-terracotta focus-visible:opacity-100 group-hover:opacity-100 max-sm:opacity-100"
+      >
+        <Trash2 className="size-4" />
+      </button>
       <span
         className="absolute -top-3 left-1/2 h-6 w-24 rounded-sm bg-amber-warm/70 shadow-sm"
         style={{ transform: "translateX(-50%) rotate(-2deg)" }}
@@ -251,6 +279,9 @@ function ScrapbookCard({
           <p className="text-xs font-bold uppercase tracking-widest text-terracotta">
             {spot.location}
           </p>
+          {loggedOn ? (
+            <p className="mt-1 text-xs font-semibold text-vault-bg/50">{loggedOn}</p>
+          ) : null}
 
           {spot.caption && (
             <p className="mt-2 font-display text-sm italic leading-snug text-vault-bg/70">
@@ -295,6 +326,17 @@ function ScrapbookCard({
       </div>
     </article>
   )
+}
+
+function formatLoggedAt(iso?: string) {
+  if (!iso) return ""
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ""
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date)
 }
 
 function ScoreChip({ name, score }: { name: string; score?: number }) {

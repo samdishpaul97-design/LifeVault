@@ -64,6 +64,7 @@ export function vaultEntryToSpot(entry: VaultEntry): TourSpot {
     image: spotImage(entry.image_url),
     caption: entry.review_text ?? undefined,
     samScore: scored ? rating : undefined,
+    createdAt: entry.created_at,
   };
 }
 

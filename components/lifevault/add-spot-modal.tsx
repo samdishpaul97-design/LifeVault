@@ -2,17 +2,33 @@
 
 import { useEffect, useState } from "react"
 import { X } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+
+export interface SpotDraftDefaults {
+  name?: string
+  location?: string
+  xp?: number
+  category?: string
+}
 
 interface AddSpotModalProps {
   open: boolean
   tourName?: string
+  defaults?: SpotDraftDefaults
   onClose: () => void
-  onSave: (data: { name: string; location: string; xp: number }) => void
+  onSave: (data: {
+    name: string
+    location: string
+    xp: number
+    category?: string
+    image?: string
+  }) => void | Promise<boolean | void>
 }
 
 export function AddSpotModal({
   open,
   tourName,
+  defaults,
   onClose,
   onSave,
 }: AddSpotModalProps) {
@@ -28,29 +44,75 @@ export function AddSpotModal({
   if (!open) return null
 
   return (
-    <AddSpotForm tourName={tourName} onClose={onClose} onSave={onSave} />
+    <AddSpotForm
+      key={`${defaults?.name ?? ""}-${defaults?.location ?? ""}-${defaults?.xp ?? ""}`}
+      tourName={tourName}
+      defaults={defaults}
+      onClose={onClose}
+      onSave={onSave}
+    />
   )
 }
 
 function AddSpotForm({
   tourName,
+  defaults,
   onClose,
   onSave,
 }: Omit<AddSpotModalProps, "open">) {
-  const [name, setName] = useState("")
-  const [location, setLocation] = useState("")
-  const [xp, setXp] = useState(50)
+  const [name, setName] = useState(defaults?.name ?? "")
+  const [location, setLocation] = useState(defaults?.location ?? "")
+  const [xp, setXp] = useState(defaults?.xp && defaults.xp > 0 ? defaults.xp : 50)
+  const [file, setFile] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) return
-    onSave({ name: name.trim(), location: location.trim() || "TBD", xp })
+    if (!name.trim() || isUploading) return
+
+    setUploadError(null)
+    setIsUploading(true)
+
+    let image: string | undefined
+    if (file) {
+      const safeName = file.name.replace(/[^\w.-]+/g, "_")
+      const fileName = `${crypto.randomUUID()}-${safeName}`
+      const { error } = await supabase.storage.from("vault_images").upload(fileName, file)
+
+      if (error) {
+        setUploadError(error.message)
+        setIsUploading(false)
+        return
+      }
+
+      const { data } = supabase.storage.from("vault_images").getPublicUrl(fileName)
+      image = data.publicUrl
+    }
+
+    const saved = await onSave({
+      name: name.trim(),
+      location: location.trim() || "TBD",
+      xp,
+      category: defaults?.category,
+      image,
+    })
+    if (saved === false) {
+      setIsUploading(false)
+      return
+    }
     onClose()
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
+      <div
+        className="absolute inset-0"
+        onClick={() => {
+          if (!isUploading) onClose()
+        }}
+        aria-hidden="true"
+      />
       <div
         role="dialog"
         aria-modal="true"
@@ -63,10 +125,14 @@ function AddSpotForm({
               id="add-spot-title"
               className="font-display text-xl font-semibold text-cream"
             >
-              Add New Spot
+              {defaults?.name ? "Conquer this spot" : "Add New Spot"}
             </h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              {tourName ? `Drop a stop on ${tourName}.` : "Add a stop to this tour."}
+              {defaults?.name
+                ? "Add a photo, then save it to the vault."
+                : tourName
+                  ? `Drop a stop on ${tourName}.`
+                  : "Add a stop to this tour."}
             </p>
           </div>
           <button
@@ -88,7 +154,7 @@ function AddSpotForm({
             </label>
             <input
               id="spot-name"
-              autoFocus
+              autoFocus={!defaults?.name}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Pizzeria Libretto"
@@ -113,6 +179,24 @@ function AddSpotForm({
           </div>
 
           <div>
+            <label
+              htmlFor="spot-image"
+              className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-muted-foreground"
+            >
+              Photo
+            </label>
+            <input
+              id="spot-image"
+              type="file"
+              accept="image/*"
+              autoFocus={Boolean(defaults?.name)}
+              disabled={isUploading}
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="w-full rounded-xl border border-input bg-vault-bg px-4 py-3 text-sm text-cream file:mr-3 file:rounded-lg file:border-0 file:bg-amber-warm/15 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-amber-warm focus:border-amber-warm focus:outline-none focus:ring-2 focus:ring-amber-warm/30"
+            />
+          </div>
+
+          <div>
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                 XP Reward
@@ -133,20 +217,23 @@ function AddSpotForm({
             />
           </div>
 
+          {uploadError ? <p className="text-sm text-terracotta">{uploadError}</p> : null}
+
           <div className="flex gap-3 pt-1">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-xl border border-border py-3 text-sm font-bold text-muted-foreground transition-colors hover:bg-secondary hover:text-cream"
+              disabled={isUploading}
+              className="flex-1 rounded-xl border border-border py-3 text-sm font-bold text-muted-foreground transition-colors hover:bg-secondary hover:text-cream disabled:cursor-not-allowed disabled:opacity-40"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={!name.trim()}
+              disabled={!name.trim() || isUploading}
               className="flex-1 rounded-xl bg-amber-warm py-3 text-sm font-black text-primary-foreground shadow-md shadow-amber-warm/20 transition-all hover:bg-amber-warm/90 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Add Spot
+              {isUploading ? (file ? "Uploading…" : "Saving…") : defaults?.name ? "Save" : "Add Spot"}
             </button>
           </div>
         </form>

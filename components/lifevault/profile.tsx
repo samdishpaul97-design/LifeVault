@@ -14,9 +14,12 @@ interface ProfileProps {
   level: number
   xp: number
   maxXp: number
+  memories: number
+  tours: number
+  stops: number
 }
 
-export function Profile({ level, xp, maxXp }: ProfileProps) {
+export function Profile({ level, xp, maxXp, memories, tours, stops }: ProfileProps) {
   const pct = Math.min(100, Math.round((xp / maxXp) * 100))
   const remaining = Math.max(0, maxXp - xp)
   const unlocked = badges.filter((b) => b.unlocked).length
@@ -68,6 +71,12 @@ export function Profile({ level, xp, maxXp }: ProfileProps) {
         </div>
       </div>
 
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="Memories" value={memories} />
+        <Stat label="Tours" value={tours} />
+        <Stat label="Stops" value={stops} />
+      </div>
+
       {/* Badges */}
       <div>
         <div className="mb-3 flex items-center justify-between">
@@ -103,6 +112,17 @@ export function Profile({ level, xp, maxXp }: ProfileProps) {
         </div>
       </div>
     </section>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-3xl border border-border bg-card/80 p-4 text-center shadow-lg shadow-black/20">
+      <p className="font-display text-2xl font-semibold tabular-nums text-cream">{value}</p>
+      <p className="mt-1 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+        {label}
+      </p>
+    </div>
   )
 }
 

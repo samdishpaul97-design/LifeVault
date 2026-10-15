@@ -2,68 +2,93 @@
 
 import { useState } from "react"
 import Image from "next/image"
-import { Check, MapPin, Plus } from "lucide-react"
-import {
-  INSPO_CATEGORY_META,
-  suggestions,
-  type InspoCategory,
-  type Suggestion,
-} from "@/lib/lifevault-data"
+import { Bookmark, MapPin } from "lucide-react"
+import { suggestions, type Suggestion } from "@/lib/lifevault-data"
 
-const FILTERS: (InspoCategory | "All")[] = [
-  "All",
-  "Best Pizza",
-  "Scenic Hikes",
-  "Date Night",
-  "Travel Escapes",
-]
+const VIBES = ["Foodie", "Nightlife", "Nature", "Creative", "Sanctuary"] as const
 
-interface DiscoverProps {
-  onAdd: (s: Suggestion) => void
-  addedNames: Set<string>
+const SUGGESTION_VIBES: Record<string, string[]> = {
+  "s-pizza-1": ["Foodie"],
+  "s-pizza-2": ["Foodie"],
+  "s-hike-1": ["Nature", "Sanctuary"],
+  "s-hike-2": ["Nature", "Sanctuary"],
+  "s-date-1": ["Nightlife", "Creative"],
+  "s-date-2": ["Foodie", "Sanctuary"],
+  "s-travel-1": ["Foodie", "Creative"],
 }
 
-export function Discover({ onAdd, addedNames }: DiscoverProps) {
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All")
+interface DiscoverProps {
+  onBookmark: (s: Suggestion) => Promise<boolean>
+  bookmarkedNames: Set<string>
+  defaultFilters?: string[]
+}
+
+export function Discover({
+  onBookmark,
+  bookmarkedNames,
+  defaultFilters = [],
+}: DiscoverProps) {
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const [activeFilters, setActiveFilters] = useState<string[]>(defaultFilters)
+
+  const toggleFilter = (vibe: string) => {
+    setActiveFilters((current) =>
+      current.includes(vibe) ? current.filter((item) => item !== vibe) : [...current, vibe],
+    )
+  }
 
   const list =
-    filter === "All"
+    activeFilters.length === 0
       ? suggestions
-      : suggestions.filter((s) => s.category === filter)
+      : suggestions.filter((spot) =>
+          (SUGGESTION_VIBES[spot.id] ?? []).some((vibe) => activeFilters.includes(vibe)),
+        )
 
   return (
     <section className="space-y-6">
       <div>
         <h2 className="font-display text-2xl font-semibold text-cream">Discover</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Hand-picked spots for your next adventure. Tap to drop one onto a tour.
+          Hand-picked spots for your next adventure. Bookmark one for the planner.
         </p>
       </div>
 
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        {FILTERS.map((f) => {
-          const isActive = filter === f
-          const meta = f === "All" ? null : INSPO_CATEGORY_META[f]
-          return (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-bold transition-all ${
-                isActive
-                  ? "border-amber-warm bg-amber-warm/15 text-amber-warm"
-                  : "border-border text-muted-foreground hover:text-cream"
-              }`}
-            >
-              {meta && <span aria-hidden="true">{meta.emoji}</span>}
-              {f}
-            </button>
-          )
-        })}
+      <div>
+        <p className="mb-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          Vibe Survey
+        </p>
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {VIBES.map((vibe) => {
+            const isActive = activeFilters.includes(vibe)
+            return (
+              <button
+                key={vibe}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => toggleFilter(vibe)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-bold transition-all ${
+                  isActive
+                    ? "border-amber-warm bg-amber-warm/15 text-amber-warm"
+                    : "border-border text-muted-foreground hover:text-cream"
+                }`}
+              >
+                {vibe}
+              </button>
+            )
+          })}
+        </div>
       </div>
+
+      {list.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-border bg-card/40 p-5 text-center text-sm text-muted-foreground">
+          Nothing in this vibe yet. Clear a filter to see every spot.
+        </p>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         {list.map((s) => {
-          const added = addedNames.has(s.name)
+          const saved = bookmarkedNames.has(s.name)
+          const saving = savingId === s.id
           return (
             <article
               key={s.id}
@@ -100,24 +125,21 @@ export function Discover({ onAdd, addedNames }: DiscoverProps) {
                 </p>
 
                 <button
-                  onClick={() => onAdd(s)}
-                  className={`mt-4 flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition-all ${
-                    added
-                      ? "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                      : "bg-amber-warm/15 text-amber-warm hover:bg-amber-warm hover:text-primary-foreground"
+                  type="button"
+                  aria-label={saved ? `${s.name} saved to planner` : `Save ${s.name} to planner`}
+                  aria-pressed={saved}
+                  disabled={saved || saving}
+                  onClick={() => {
+                    setSavingId(s.id)
+                    void onBookmark(s).finally(() => setSavingId(null))
+                  }}
+                  className={`mt-4 grid size-10 place-items-center rounded-xl border transition-all disabled:cursor-default ${
+                    saved
+                      ? "border-amber-warm/40 bg-amber-warm/15 text-amber-warm"
+                      : "border-border text-muted-foreground hover:border-amber-warm/40 hover:text-amber-warm"
                   }`}
                 >
-                  {added ? (
-                    <>
-                      <Check className="size-4" />
-                      On a tour · add again
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="size-4" />
-                      Add to a Tour
-                    </>
-                  )}
+                  <Bookmark className={`size-4 ${saved ? "fill-amber-warm" : ""}`} />
                 </button>
               </div>
             </article>
