@@ -3,12 +3,41 @@
 import { useState } from "react"
 
 export const LIFEVAULT_PROFILE_KEY = "lifevault_profile"
+export const LIFEVAULT_PROFILE_EVENT = "lifevault-profile"
 
-export const ONBOARDING_VIBES = ["Foodie", "Nightlife", "Nature", "Creative", "Sanctuary"] as const
+export const ONBOARDING_VIBES = [
+  "Cafe",
+  "Nightlife",
+  "Nature",
+  "Creative",
+  "Sanctuary",
+  "Fitness",
+] as const
 
 export interface LifevaultProfile {
-  name: string
+  firstName: string
   vibes: string[]
+}
+
+const LEGACY_VIBES: Record<string, string> = { Foodie: "Cafe" }
+
+export function readLifevaultProfile(): LifevaultProfile | null {
+  const raw = window.localStorage.getItem(LIFEVAULT_PROFILE_KEY)
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as { firstName?: string; name?: string; vibes?: unknown }
+    const firstName = (parsed.firstName || parsed.name || "").trim()
+    if (!firstName || !Array.isArray(parsed.vibes)) return null
+
+    const vibes = parsed.vibes
+      .filter((vibe): vibe is string => typeof vibe === "string" && vibe.length > 0)
+      .map((vibe) => LEGACY_VIBES[vibe] ?? vibe)
+
+    return { firstName, vibes }
+  } catch {
+    return null
+  }
 }
 
 interface OnboardingModalProps {
@@ -18,12 +47,12 @@ interface OnboardingModalProps {
 
 export function OnboardingModal({ open, onComplete }: OnboardingModalProps) {
   const [step, setStep] = useState(1)
-  const [name, setName] = useState("")
+  const [firstName, setFirstName] = useState("")
   const [vibes, setVibes] = useState<string[]>([])
 
   if (!open) return null
 
-  const trimmedName = name.trim()
+  const trimmedName = firstName.trim()
 
   const toggleVibe = (vibe: string) => {
     setVibes((current) => {
@@ -34,12 +63,15 @@ export function OnboardingModal({ open, onComplete }: OnboardingModalProps) {
   }
 
   const finish = () => {
-    if (!trimmedName || vibes.length !== 3) return
-    onComplete({ name: trimmedName, vibes })
+    if (!trimmedName || vibes.length === 0 || vibes.length > 3) return
+    const profile = { firstName: trimmedName, vibes }
+    window.localStorage.setItem(LIFEVAULT_PROFILE_KEY, JSON.stringify(profile))
+    window.dispatchEvent(new Event(LIFEVAULT_PROFILE_EVENT))
+    onComplete(profile)
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
       <div
         role="dialog"
         aria-modal="true"
@@ -56,7 +88,7 @@ export function OnboardingModal({ open, onComplete }: OnboardingModalProps) {
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {step === 1 && "This stays on this device and personalizes the scrapbook."}
-          {step === 2 && `${vibes.length} of 3 selected. These tune Discover before you browse.`}
+          {step === 2 && `${vibes.length} of 3 selected. Pick up to three.`}
           {step === 3 && `${trimmedName}, we'll open the vault around ${vibes.join(", ")}.`}
         </p>
 
@@ -76,8 +108,8 @@ export function OnboardingModal({ open, onComplete }: OnboardingModalProps) {
             </label>
             <input
               id="vault-first-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
+              value={firstName}
+              onChange={(event) => setFirstName(event.target.value)}
               autoFocus
               autoComplete="given-name"
               placeholder="Sam"
@@ -125,7 +157,7 @@ export function OnboardingModal({ open, onComplete }: OnboardingModalProps) {
               </button>
               <button
                 type="button"
-                disabled={vibes.length !== 3}
+                disabled={vibes.length === 0}
                 onClick={() => setStep(3)}
                 className="flex-1 rounded-xl bg-amber-warm py-3 text-sm font-black text-primary-foreground shadow-md shadow-amber-warm/20 transition-all hover:bg-amber-warm/90 disabled:cursor-not-allowed disabled:opacity-40"
               >

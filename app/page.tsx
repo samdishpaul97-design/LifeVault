@@ -14,6 +14,7 @@ import { Toast } from "@/components/lifevault/toast";
 import {
   LIFEVAULT_PROFILE_KEY,
   OnboardingModal,
+  readLifevaultProfile,
   type LifevaultProfile,
 } from "@/components/lifevault/onboarding-modal";
 import type { Suggestion, Tour } from "@/lib/lifevault-data";
@@ -32,6 +33,8 @@ type SpotDraft = {
   location: string;
   xp: number;
   image?: string;
+  location_lat?: number | null;
+  location_lng?: number | null;
 };
 
 export default function Page() {
@@ -104,14 +107,10 @@ export default function Page() {
       await Promise.resolve();
       if (cancelled) return;
 
-      const raw = window.localStorage.getItem(LIFEVAULT_PROFILE_KEY);
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw) as LifevaultProfile;
-          if (parsed.name && Array.isArray(parsed.vibes)) setProfile(parsed);
-        } catch {
-          window.localStorage.removeItem(LIFEVAULT_PROFILE_KEY);
-        }
+      const saved = readLifevaultProfile();
+      if (saved) setProfile(saved);
+      else if (window.localStorage.getItem(LIFEVAULT_PROFILE_KEY)) {
+        window.localStorage.removeItem(LIFEVAULT_PROFILE_KEY);
       }
       setProfileChecked(true);
     }
@@ -184,12 +183,17 @@ export default function Page() {
     async (tourId: string, data: SpotDraft) => {
       const tour = tours.find((item) => item.id === tourId);
       const category = tour?.name ?? tourId;
-      const payload: Pick<VaultEntry, "title" | "category" | "content" | "rating" | "image_url"> = {
+      const payload: Pick<
+        VaultEntry,
+        "title" | "category" | "content" | "rating" | "image_url" | "location_lat" | "location_lng"
+      > = {
         title: data.name,
         category,
         content: data.location,
         rating: data.xp,
         image_url: data.image ?? null,
+        location_lat: data.location_lat ?? null,
+        location_lng: data.location_lng ?? null,
       };
 
       const { error: insertError } = await supabase.from("vault_entries").insert(payload);
@@ -226,6 +230,8 @@ export default function Page() {
         category: suggestion.category,
         xp_value: suggestion.xp,
         image_url: suggestion.image,
+        location_lat: suggestion.location_lat ?? null,
+        location_lng: suggestion.location_lng ?? null,
       });
 
       if (insertError) {
@@ -245,7 +251,7 @@ export default function Page() {
   return (
     <div className="min-h-dvh">
       <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pt-4 pb-28 sm:px-6 md:pb-10">
-        <CoopHeader level={level} xp={xp} maxXp={maxXp} name={profile?.name} />
+        <CoopHeader level={level} xp={xp} maxXp={maxXp} />
 
         <NavBar active={tab} onChange={changeTab} className="hidden md:flex" />
 
@@ -367,6 +373,8 @@ export default function Page() {
             location: data.location,
             xp: data.xp,
             image: data.image,
+            location_lat: data.location_lat,
+            location_lng: data.location_lng,
           });
           if (saved) showToast(`Added "${data.name}" to ${tourName}`);
           return saved;

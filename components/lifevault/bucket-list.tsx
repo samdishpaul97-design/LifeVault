@@ -13,6 +13,8 @@ interface PlannerSpot {
   category: string
   xp: number
   imageUrl: string | null
+  location_lat?: number | null
+  location_lng?: number | null
 }
 
 interface BucketListProps {
@@ -31,9 +33,15 @@ export function BucketList({ onRemoved, onLogged, onError }: BucketListProps) {
     let cancelled = false
 
     async function load() {
-      const { data, error: queryError } = await supabase
+      const withCoords = await supabase
         .from("bucket_list")
-        .select("id, name, location, category, xp_value, image_url")
+        .select("id, name, location, category, xp_value, image_url, location_lat, location_lng")
+      const missingCoords =
+        withCoords.error?.message.includes("location_lat") ||
+        withCoords.error?.message.includes("location_lng")
+      const { data, error: queryError } = missingCoords
+        ? await supabase.from("bucket_list").select("id, name, location, category, xp_value, image_url")
+        : withCoords
 
       if (cancelled) return
       if (queryError) {
@@ -76,6 +84,8 @@ export function BucketList({ onRemoved, onLogged, onError }: BucketListProps) {
     xp: number
     category?: string
     image?: string
+    location_lat?: number | null
+    location_lng?: number | null
   }) => {
     if (!conquerSpot) return false
 
@@ -85,6 +95,8 @@ export function BucketList({ onRemoved, onLogged, onError }: BucketListProps) {
       content: data.location,
       rating: data.xp,
       image_url: data.image ?? conquerSpot.imageUrl,
+      location_lat: data.location_lat ?? conquerSpot.location_lat ?? null,
+      location_lng: data.location_lng ?? conquerSpot.location_lng ?? null,
     })
     if (insertError) {
       onError?.(insertError.message)
@@ -191,13 +203,15 @@ export function BucketList({ onRemoved, onLogged, onError }: BucketListProps) {
 
       <AddSpotModal
         open={conquerSpot !== null}
+        proofOnly
         defaults={
           conquerSpot
             ? {
                 name: conquerSpot.name,
                 location: conquerSpot.location,
-                xp: conquerSpot.xp,
                 category: conquerSpot.category,
+                location_lat: conquerSpot.location_lat,
+                location_lng: conquerSpot.location_lng,
               }
             : undefined
         }
@@ -215,15 +229,26 @@ function toPlannerSpot(row: {
   category: string | null
   xp_value: number | string | null
   image_url: string | null
+  location_lat?: number | string | null
+  location_lng?: number | string | null
 }): PlannerSpot {
   const xp = typeof row.xp_value === "number" ? row.xp_value : Number(row.xp_value)
   const imageUrl = row.image_url && row.image_url.startsWith("/") ? row.image_url : null
 
   return {
     id: row.id,
+    name: row.name?.trim() || "Untitled",
     location: row.location ?? "",
     category: row.category ?? "",
     xp: Number.isFinite(xp) ? xp : 0,
     imageUrl,
+    location_lat: finiteCoord(row.location_lat),
+    location_lng: finiteCoord(row.location_lng),
   }
+}
+
+function finiteCoord(value: number | string | null | undefined) {
+  if (value == null || value === "") return null
+  const number = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(number) ? number : null
 }

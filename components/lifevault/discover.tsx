@@ -1,20 +1,21 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Image from "next/image"
 import { Bookmark, MapPin } from "lucide-react"
+import { readLifevaultProfile } from "@/components/lifevault/onboarding-modal"
 import { suggestions, type Suggestion } from "@/lib/lifevault-data"
 
-const VIBES = ["Foodie", "Nightlife", "Nature", "Creative", "Sanctuary"] as const
+const VIBES = ["Cafe", "Nightlife", "Nature", "Creative", "Sanctuary", "Fitness"] as const
 
 const SUGGESTION_VIBES: Record<string, string[]> = {
-  "s-pizza-1": ["Foodie"],
-  "s-pizza-2": ["Foodie"],
-  "s-hike-1": ["Nature", "Sanctuary"],
-  "s-hike-2": ["Nature", "Sanctuary"],
+  "s-pizza-1": ["Cafe"],
+  "s-pizza-2": ["Cafe"],
+  "s-hike-1": ["Nature", "Sanctuary", "Fitness"],
+  "s-hike-2": ["Nature", "Sanctuary", "Fitness"],
   "s-date-1": ["Nightlife", "Creative"],
-  "s-date-2": ["Foodie", "Sanctuary"],
-  "s-travel-1": ["Foodie", "Creative"],
+  "s-date-2": ["Cafe", "Sanctuary"],
+  "s-travel-1": ["Cafe", "Creative"],
 }
 
 interface DiscoverProps {
@@ -30,6 +31,24 @@ export function Discover({
 }: DiscoverProps) {
   const [savingId, setSavingId] = useState<string | null>(null)
   const [activeFilters, setActiveFilters] = useState<string[]>(defaultFilters)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function applySavedVibes() {
+      await Promise.resolve()
+      if (cancelled) return
+      const saved = readLifevaultProfile()?.vibes ?? []
+      const known = new Set<string>(VIBES)
+      const next = saved.filter((vibe) => known.has(vibe))
+      if (next.length > 0) setActiveFilters(next)
+    }
+
+    void applySavedVibes()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const toggleFilter = (vibe: string) => {
     setActiveFilters((current) =>
@@ -131,7 +150,28 @@ export function Discover({
                   disabled={saved || saving}
                   onClick={() => {
                     setSavingId(s.id)
-                    void onBookmark(s).finally(() => setSavingId(null))
+                    void (async () => {
+                      let location_lat: number | undefined
+                      let location_lng: number | undefined
+                      try {
+                        const geoRes = await fetch(
+                          "https://nominatim.openstreetmap.org/search?format=json&q=" +
+                            encodeURIComponent(s.location),
+                        )
+                        const geoData = (await geoRes.json()) as { lat?: string; lon?: string }[]
+                        if (geoData[0]) {
+                          const lat = Number(geoData[0].lat)
+                          const lng = Number(geoData[0].lon)
+                          if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                            location_lat = lat
+                            location_lng = lng
+                          }
+                        }
+                      } catch {
+                        // A bookmark still saves when the map lookup misses.
+                      }
+                      await onBookmark({ ...s, location_lat, location_lng })
+                    })().finally(() => setSavingId(null))
                   }}
                   className={`mt-4 grid size-10 place-items-center rounded-xl border transition-all disabled:cursor-default ${
                     saved

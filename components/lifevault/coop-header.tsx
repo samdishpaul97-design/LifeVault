@@ -1,15 +1,38 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { User } from "lucide-react"
+import { LIFEVAULT_PROFILE_EVENT, readLifevaultProfile } from "@/components/lifevault/onboarding-modal"
 
 interface CoopHeaderProps {
   level: number
   xp: number
   maxXp: number
-  name?: string
 }
 
-export function CoopHeader({ level, xp, maxXp, name }: CoopHeaderProps) {
+export function CoopHeader({ level, xp, maxXp }: CoopHeaderProps) {
+  const [firstName, setFirstName] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function readName() {
+      await Promise.resolve()
+      if (cancelled) return
+      setFirstName(readLifevaultProfile()?.firstName ?? null)
+    }
+
+    const onProfile = () => {
+      setFirstName(readLifevaultProfile()?.firstName ?? null)
+    }
+
+    void readName()
+    window.addEventListener(LIFEVAULT_PROFILE_EVENT, onProfile)
+    return () => {
+      cancelled = true
+      window.removeEventListener(LIFEVAULT_PROFILE_EVENT, onProfile)
+    }
+  }, [])
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-border bg-card/80 p-4 shadow-lg shadow-black/20 backdrop-blur sm:p-5">
       <div className="flex items-center gap-4">
@@ -21,7 +44,7 @@ export function CoopHeader({ level, xp, maxXp, name }: CoopHeaderProps) {
             Level {level} Explorer
           </p>
           <h1 className="font-display text-xl font-semibold text-cream sm:text-2xl">
-            {name ? `${name}'s Vault` : "Your Vault"}
+            {firstName ? `${firstName}'s Vault` : "My Vault"}
           </h1>
         </div>
       </div>

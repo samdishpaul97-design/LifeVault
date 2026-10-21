@@ -16,6 +16,8 @@ export interface TourSpot {
   stickers?: string[]
   rotation?: number
   createdAt?: string
+  location_lat?: number | null
+  location_lng?: number | null
 }
 
 export interface Tour {
@@ -43,6 +45,8 @@ export interface Suggestion {
   blurb: string
   image: string
   xp: number
+  location_lat?: number | null
+  location_lng?: number | null
 }
 
 export interface Badge {
