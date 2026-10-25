@@ -28,7 +28,32 @@ LifeVault is a single-player-first digital scrapbook and life-quest engine. One 
 - Printable Albums
 - Year-in-Review
 
-## Phase 4: Co-op Expansion
+## Phase 4: PWA Mobile Manifest & iOS Standalone
+
+**Status: Completed**
+
+- Web app manifest
+- iOS standalone configuration
+
+## Phase 5: Live Google Places Discovery
+
+**Status: Completed**
+
+- Live Google Places API discovery route
+- Quality filter: places rated 4.3 stars or higher
+- Conquer modal auto-filled from the chosen place
+
+**Supabase fix:** `vault_entries.rating` is `numeric(5,1)` so memories can log 100+ XP.
+
+## Phase 6: The Gamified Profile Tab
+
+**Status: Next**
+
+- Live Supabase XP aggregation
+- Level progress bar
+- Achievement badges
+
+## Later: Co-op Expansion
 
 - Player 2 Auth
 - Shared Vaults
