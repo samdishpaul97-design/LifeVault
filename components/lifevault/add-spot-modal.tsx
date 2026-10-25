@@ -20,6 +20,10 @@ function frictionXp(id: FrictionId) {
   return FRICTION_LEVELS.find((level) => level.id === id)?.xp ?? 25
 }
 
+function frictionForXp(xp?: number): FrictionId {
+  return FRICTION_LEVELS.find((level) => level.xp === xp)?.id ?? "medium"
+}
+
 function finiteCoord(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : null
 }
@@ -64,7 +68,7 @@ interface AddSpotModalProps {
   onSave: (data: {
     name: string
     location: string
-    xp: number
+    xp_value: number
     category?: string
     image?: string
     location_lat?: number | null
@@ -112,7 +116,7 @@ function AddSpotForm({
 }: Omit<AddSpotModalProps, "open">) {
   const [name, setName] = useState(defaults?.name ?? "")
   const [location, setLocation] = useState(defaults?.location ?? "")
-  const [friction, setFriction] = useState<FrictionId>("medium")
+  const [friction, setFriction] = useState<FrictionId>(frictionForXp(defaults?.xp))
   const [file, setFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isPinning, setIsPinning] = useState(false)
@@ -170,11 +174,12 @@ function AddSpotForm({
       }
     }
 
+    const xp_value = frictionXp(friction)
     setIsUploading(true)
     const saved = await onSave({
       name: name.trim(),
       location: locationString,
-      xp: frictionXp(friction),
+      xp_value,
       category: defaults?.category,
       image,
       location_lat: locationLat,

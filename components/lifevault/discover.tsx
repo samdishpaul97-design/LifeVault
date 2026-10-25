@@ -1,36 +1,46 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Image from "next/image"
-import { Bookmark, MapPin } from "lucide-react"
+import { ExternalLink, MapPin, Zap } from "lucide-react"
+import { AddSpotModal } from "@/components/lifevault/add-spot-modal"
 import { readLifevaultProfile } from "@/components/lifevault/onboarding-modal"
-import { suggestions, type Suggestion } from "@/lib/lifevault-data"
 
 const VIBES = ["Cafe", "Nightlife", "Nature", "Creative", "Sanctuary", "Fitness"] as const
 
-const SUGGESTION_VIBES: Record<string, string[]> = {
-  "s-pizza-1": ["Cafe"],
-  "s-pizza-2": ["Cafe"],
-  "s-hike-1": ["Nature", "Sanctuary", "Fitness"],
-  "s-hike-2": ["Nature", "Sanctuary", "Fitness"],
-  "s-date-1": ["Nightlife", "Creative"],
-  "s-date-2": ["Cafe", "Sanctuary"],
-  "s-travel-1": ["Cafe", "Creative"],
+const CONQUER_XP = 50
+
+interface DiscoverPlace {
+  name: string
+  rating: number
+  review_count: number
+  formatted_address: string
+  place_id: string
+  lat: number
+  lng: number
+  photo: string | null
+  vibe: string
 }
 
 interface DiscoverProps {
-  onBookmark: (s: Suggestion) => Promise<boolean>
-  bookmarkedNames: Set<string>
   defaultFilters?: string[]
+  onConquer: (data: {
+    name: string
+    location: string
+    xp_value: number
+    category?: string
+    image?: string
+    location_lat?: number | null
+    location_lng?: number | null
+  }) => void | Promise<boolean | void>
 }
 
-export function Discover({
-  onBookmark,
-  bookmarkedNames,
-  defaultFilters = [],
-}: DiscoverProps) {
-  const [savingId, setSavingId] = useState<string | null>(null)
+export function Discover({ defaultFilters = [], onConquer }: DiscoverProps) {
   const [activeFilters, setActiveFilters] = useState<string[]>(defaultFilters)
+  const [places, setPlaces] = useState<DiscoverPlace[]>([])
+  const [loading, setLoading] = useState(defaultFilters.length > 0)
+  const [error, setError] = useState<string | null>(null)
+  const [conquer, setConquer] = useState<DiscoverPlace | null>(null)
+  const filterKey = activeFilters.join("|")
 
   useEffect(() => {
     let cancelled = false
@@ -41,7 +51,8 @@ export function Discover({
       const saved = readLifevaultProfile()?.vibes ?? []
       const known = new Set<string>(VIBES)
       const next = saved.filter((vibe) => known.has(vibe))
-      if (next.length > 0) setActiveFilters(next)
+      if (next.length === 0) return
+      setActiveFilters((current) => (current.join("|") === next.join("|") ? current : next))
     }
 
     void applySavedVibes()
@@ -50,25 +61,72 @@ export function Discover({
     }
   }, [])
 
+  useEffect(() => {
+    const vibes = filterKey ? filterKey.split("|") : []
+    if (vibes.length === 0) {
+      setPlaces([])
+      setError(null)
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setPlaces([])
+    setLoading(true)
+    setError(null)
+
+    async function load() {
+      try {
+        const batches = await Promise.all(
+          vibes.map(async (vibe) => {
+            const res = await fetch(`/api/discover?vibe=${encodeURIComponent(vibe)}`)
+            const body = (await res.json()) as DiscoverPlace[] | { error?: string }
+            if (!res.ok || !Array.isArray(body)) {
+              const message =
+                !Array.isArray(body) && body.error ? body.error : "Could not search places."
+              throw new Error(message)
+            }
+            return body.map((place) => ({ ...place, vibe }))
+          }),
+        )
+        if (cancelled) return
+
+        const seen = new Set<string>()
+        const next: DiscoverPlace[] = []
+        for (const place of batches.flat()) {
+          if (seen.has(place.place_id)) continue
+          seen.add(place.place_id)
+          next.push(place)
+        }
+        next.sort((a, b) => b.rating - a.rating || b.review_count - a.review_count)
+        setPlaces(next)
+      } catch (err) {
+        if (cancelled) return
+        setPlaces([])
+        setError(err instanceof Error ? err.message : "Could not search places.")
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [filterKey])
+
   const toggleFilter = (vibe: string) => {
     setActiveFilters((current) =>
       current.includes(vibe) ? current.filter((item) => item !== vibe) : [...current, vibe],
     )
   }
 
-  const list =
-    activeFilters.length === 0
-      ? suggestions
-      : suggestions.filter((spot) =>
-          (SUGGESTION_VIBES[spot.id] ?? []).some((vibe) => activeFilters.includes(vibe)),
-        )
-
   return (
     <section className="space-y-6">
       <div>
         <h2 className="font-display text-2xl font-semibold text-cream">Discover</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Hand-picked spots for your next adventure. Bookmark one for the planner.
+          Elite spots for your vibes. 4.3 stars or higher, with over 100 reviews.
         </p>
       </div>
 
@@ -98,94 +156,100 @@ export function Discover({
         </div>
       </div>
 
-      {list.length === 0 ? (
+      {loading ? <p className="text-sm text-muted-foreground">Searching for elite spots…</p> : null}
+
+      {error ? (
+        <p className="rounded-2xl border border-terracotta/40 bg-terracotta/10 px-4 py-3 text-sm text-cream">
+          {error}
+        </p>
+      ) : null}
+
+      {!loading && !error && places.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border bg-card/40 p-5 text-center text-sm text-muted-foreground">
-          Nothing in this vibe yet. Clear a filter to see every spot.
+          {activeFilters.length === 0
+            ? "Choose a vibe to search Toronto."
+            : "Nothing elite enough in this vibe yet. Try another filter."}
         </p>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {list.map((s) => {
-          const saved = bookmarkedNames.has(s.name)
-          const saving = savingId === s.id
-          return (
-            <article
-              key={s.id}
-              className="animate-float-in group flex flex-col overflow-hidden rounded-3xl border border-border bg-card/80 shadow-lg shadow-black/20"
-            >
-              <div className="relative aspect-[16/10] overflow-hidden">
-                <Image
-                  src={s.image || "/placeholder.svg"}
-                  alt={s.name}
-                  fill
-                  sizes="(max-width: 640px) 100vw, 50vw"
-                  className="object-cover transition-transform duration-500 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-vault-bg/80 via-transparent to-transparent" />
-                <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-vault-bg/80 px-2.5 py-1 text-xs font-bold text-cream backdrop-blur">
-                  <span aria-hidden="true">{s.emoji}</span>
-                  {s.category}
+        {places.map((place) => (
+          <article
+            key={place.place_id}
+            className="animate-float-in group flex flex-col overflow-hidden rounded-3xl border border-border bg-card/80 shadow-lg shadow-black/20"
+          >
+            <div className="relative aspect-[16/10] overflow-hidden bg-vault-panel">
+              {place.photo ? (
+                // Google photo bytes are proxied through our route, so this is a plain image.
+                <img src={place.photo} alt="" className="size-full object-cover" />
+              ) : (
+                <span className="grid size-full place-items-center text-3xl" aria-hidden="true">
+                  📍
                 </span>
-                <span className="absolute right-3 top-3 rounded-full bg-amber-warm px-2.5 py-1 text-xs font-black text-primary-foreground">
-                  +{s.xp} XP
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-vault-bg/80 via-transparent to-transparent" />
+              <span className="absolute left-3 top-3 rounded-full bg-vault-bg/80 px-2.5 py-1 text-xs font-bold text-cream backdrop-blur">
+                {place.vibe}
+              </span>
+              <span className="absolute right-3 top-3 rounded-full bg-amber-warm px-2.5 py-1 text-xs font-black text-primary-foreground">
+                ⭐ {place.rating.toFixed(1)}
+              </span>
+            </div>
+
+            <div className="flex flex-1 flex-col p-4">
+              <h3 className="font-display text-lg font-semibold text-cream">{place.name}</h3>
+              <p className="mt-0.5 flex items-start gap-1 text-xs font-semibold text-muted-foreground">
+                <MapPin className="mt-0.5 size-3.5 shrink-0 text-terracotta" />
+                <span>{place.formatted_address}</span>
+              </p>
+              <p className="mt-2 text-sm font-bold text-cream">
+                ⭐ {place.rating.toFixed(1)}
+                <span className="ml-2 font-semibold text-muted-foreground">
+                  {place.review_count.toLocaleString()} reviews
                 </span>
-              </div>
+              </p>
 
-              <div className="flex flex-1 flex-col p-4">
-                <h3 className="font-display text-lg font-semibold text-cream">
-                  {s.name}
-                </h3>
-                <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
-                  <MapPin className="size-3.5 text-terracotta" />
-                  {s.location}
-                </p>
-                <p className="mt-2 flex-1 text-sm leading-relaxed text-cream/70">
-                  {s.blurb}
-                </p>
-
+              <div className="mt-4 flex gap-2">
+                <a
+                  href={`https://www.google.com/maps/place/?q=place_id:${place.place_id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-sm font-bold text-muted-foreground transition-colors hover:border-amber-warm/40 hover:text-cream"
+                >
+                  <ExternalLink className="size-3.5" />
+                  Inspect
+                </a>
                 <button
                   type="button"
-                  aria-label={saved ? `${s.name} saved to planner` : `Save ${s.name} to planner`}
-                  aria-pressed={saved}
-                  disabled={saved || saving}
-                  onClick={() => {
-                    setSavingId(s.id)
-                    void (async () => {
-                      let location_lat: number | undefined
-                      let location_lng: number | undefined
-                      try {
-                        const geoRes = await fetch(
-                          "https://nominatim.openstreetmap.org/search?format=json&q=" +
-                            encodeURIComponent(s.location),
-                        )
-                        const geoData = (await geoRes.json()) as { lat?: string; lon?: string }[]
-                        if (geoData[0]) {
-                          const lat = Number(geoData[0].lat)
-                          const lng = Number(geoData[0].lon)
-                          if (Number.isFinite(lat) && Number.isFinite(lng)) {
-                            location_lat = lat
-                            location_lng = lng
-                          }
-                        }
-                      } catch {
-                        // A bookmark still saves when the map lookup misses.
-                      }
-                      await onBookmark({ ...s, location_lat, location_lng })
-                    })().finally(() => setSavingId(null))
-                  }}
-                  className={`mt-4 grid size-10 place-items-center rounded-xl border transition-all disabled:cursor-default ${
-                    saved
-                      ? "border-amber-warm/40 bg-amber-warm/15 text-amber-warm"
-                      : "border-border text-muted-foreground hover:border-amber-warm/40 hover:text-amber-warm"
-                  }`}
+                  onClick={() => setConquer(place)}
+                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-warm py-2.5 text-sm font-black text-primary-foreground shadow-md shadow-amber-warm/20 transition-all hover:bg-amber-warm/90"
                 >
-                  <Bookmark className={`size-4 ${saved ? "fill-amber-warm" : ""}`} />
+                  <Zap className="size-3.5" />
+                  Conquer +{CONQUER_XP} XP
                 </button>
               </div>
-            </article>
-          )
-        })}
+            </div>
+          </article>
+        ))}
       </div>
+
+      <AddSpotModal
+        open={conquer !== null}
+        defaults={
+          conquer
+            ? {
+                name: conquer.name,
+                location: conquer.formatted_address,
+                xp: CONQUER_XP,
+                category: conquer.vibe,
+                location_lat: conquer.lat,
+                location_lng: conquer.lng,
+              }
+            : undefined
+        }
+        onClose={() => setConquer(null)}
+        onSave={onConquer}
+      />
     </section>
   )
 }

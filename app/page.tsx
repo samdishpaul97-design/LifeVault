@@ -17,7 +17,7 @@ import {
   readLifevaultProfile,
   type LifevaultProfile,
 } from "@/components/lifevault/onboarding-modal";
-import type { Suggestion, Tour } from "@/lib/lifevault-data";
+import type { Tour } from "@/lib/lifevault-data";
 import {
   supabase,
   toVaultEntry,
@@ -31,7 +31,7 @@ const XP_PER_LEVEL = 1000;
 type SpotDraft = {
   name: string;
   location: string;
-  xp: number;
+  xp_value: number;
   image?: string;
   location_lat?: number | null;
   location_lng?: number | null;
@@ -43,7 +43,6 @@ export default function Page() {
   const [tours, setTours] = useState<Tour[]>([]);
   const [activeTourId, setActiveTourId] = useState<string | null>(null);
   const [addSpotTourId, setAddSpotTourId] = useState<string | null>(null);
-  const [bookmarkedNames, setBookmarkedNames] = useState<Set<string>>(new Set());
   const [discoverView, setDiscoverView] = useState<"spots" | "planner">("spots");
   const [profile, setProfile] = useState<LifevaultProfile | null>(null);
   const [profileChecked, setProfileChecked] = useState(false);
@@ -88,18 +87,6 @@ export default function Page() {
     setTours(toursFromEntries(nextEntries));
   }, []);
 
-  const loadBookmarks = useCallback(async () => {
-    const { data, error: queryError } = await supabase.from("bucket_list").select("name");
-    if (queryError || !data) return;
-    setBookmarkedNames(
-      new Set(
-        data
-          .map((row) => row.name)
-          .filter((name): name is string => typeof name === "string" && name.length > 0),
-      ),
-    );
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -131,7 +118,7 @@ export default function Page() {
 
     async function init() {
       setLoading(true);
-      await Promise.all([loadEntries(), loadBookmarks()]);
+      await loadEntries();
       if (!cancelled) setLoading(false);
     }
 
@@ -139,7 +126,7 @@ export default function Page() {
     return () => {
       cancelled = true;
     };
-  }, [loadEntries, loadBookmarks]);
+  }, [loadEntries]);
 
   const totalXp = useMemo(
     () => entries.reduce((sum, entry) => sum + (entry.rating ?? 0), 0),
@@ -190,7 +177,7 @@ export default function Page() {
         title: data.name,
         category,
         content: data.location,
-        rating: data.xp,
+        rating: data.xp_value,
         image_url: data.image ?? null,
         location_lat: data.location_lat ?? null,
         location_lng: data.location_lng ?? null,
@@ -222,28 +209,31 @@ export default function Page() {
     [loadEntries, showToast],
   );
 
-  const onBookmark = useCallback(
-    async (suggestion: Suggestion) => {
-      const { error: insertError } = await supabase.from("bucket_list").insert({
-        name: suggestion.name,
-        location: suggestion.location,
-        category: suggestion.category,
-        xp_value: suggestion.xp,
-        image_url: suggestion.image,
-        location_lat: suggestion.location_lat ?? null,
-        location_lng: suggestion.location_lng ?? null,
-      });
+  const logDiscovery = useCallback(
+    async (data: SpotDraft & { category?: string }) => {
+      const payload: Pick<
+        VaultEntry,
+        "title" | "category" | "content" | "rating" | "image_url" | "location_lat" | "location_lng"
+      > = {
+        title: data.name,
+        category: data.category?.trim() || "Discover",
+        content: data.location,
+        rating: data.xp_value,
+        image_url: data.image ?? null,
+        location_lat: data.location_lat ?? null,
+        location_lng: data.location_lng ?? null,
+      };
 
+      const { error: insertError } = await supabase.from("vault_entries").insert(payload);
       if (insertError) {
         showToast(insertError.message);
         return false;
       }
 
-      setBookmarkedNames((current) => new Set(current).add(suggestion.name));
-      showToast(`Saved ${suggestion.name} to your Planner!`);
+      await loadEntries();
       return true;
     },
-    [showToast],
+    [loadEntries, showToast],
   );
 
   const addSpotTour = tours.find((tour) => tour.id === addSpotTourId) ?? null;
@@ -299,22 +289,18 @@ export default function Page() {
                 <Discover
                   key={(profile?.vibes ?? []).join("|")}
                   defaultFilters={profile?.vibes ?? []}
-                  bookmarkedNames={bookmarkedNames}
-                  onBookmark={onBookmark}
+                  onConquer={async (data) => {
+                    const saved = await logDiscovery(data);
+                    if (saved) showToast(`Memory Secured: +${data.xp_value} XP added to Vault.`);
+                    return saved;
+                  }}
                 />
               ) : (
                 <BucketList
                   onError={showToast}
-                  onRemoved={(name) => {
-                    setBookmarkedNames((current) => {
-                      const next = new Set(current);
-                      next.delete(name);
-                      return next;
-                    });
-                  }}
-                  onLogged={(name) => {
+                  onLogged={(_name, xp) => {
                     void loadEntries();
-                    showToast(`Logged "${name}" in the Vault.`);
+                    showToast(`Memory Secured: +${xp} XP added to Vault.`);
                   }}
                 />
               )}
@@ -367,16 +353,15 @@ export default function Page() {
         onClose={() => setAddSpotTourId(null)}
         onSave={async (data) => {
           if (!addSpotTourId) return false;
-          const tourName = addSpotTour?.name;
           const saved = await addSpot(addSpotTourId, {
             name: data.name,
             location: data.location,
-            xp: data.xp,
+            xp_value: data.xp_value,
             image: data.image,
             location_lat: data.location_lat,
             location_lng: data.location_lng,
           });
-          if (saved) showToast(`Added "${data.name}" to ${tourName}`);
+          if (saved) showToast(`Memory Secured: +${data.xp_value} XP added to Vault.`);
           return saved;
         }}
       />

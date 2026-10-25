@@ -19,7 +19,7 @@ interface PlannerSpot {
 
 interface BucketListProps {
   onRemoved?: (name: string) => void
-  onLogged?: (name: string) => void
+  onLogged?: (name: string, xp: number) => void
   onError?: (message: string) => void
 }
 
@@ -81,7 +81,7 @@ export function BucketList({ onRemoved, onLogged, onError }: BucketListProps) {
   const logConqueredSpot = async (data: {
     name: string
     location: string
-    xp: number
+    xp_value: number
     category?: string
     image?: string
     location_lat?: number | null
@@ -89,11 +89,12 @@ export function BucketList({ onRemoved, onLogged, onError }: BucketListProps) {
   }) => {
     if (!conquerSpot) return false
 
+    const { xp_value } = data
     const { error: insertError } = await supabase.from("vault_entries").insert({
       title: data.name,
       category: data.category || conquerSpot.category || "Uncategorized",
       content: data.location,
-      rating: data.xp,
+      rating: xp_value,
       image_url: data.image ?? conquerSpot.imageUrl,
       location_lat: data.location_lat ?? conquerSpot.location_lat ?? null,
       location_lng: data.location_lng ?? conquerSpot.location_lng ?? null,
@@ -113,7 +114,7 @@ export function BucketList({ onRemoved, onLogged, onError }: BucketListProps) {
     const loggedId = conquerSpot.id
     setSpots((current) => current.filter((item) => item.id !== loggedId))
     onRemoved?.(loggedName)
-    onLogged?.(loggedName)
+    onLogged?.(loggedName, xp_value)
     return true
   }
 
