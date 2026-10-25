@@ -20,6 +20,12 @@ export const metadata: Metadata = {
   description:
     "A warm, playful scrapbook, bucket list, and date inspiration app for couples chasing pizza, hikes, and adventures together.",
   generator: "v0.app",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "LifeVault",
+    statusBarStyle: "black-translucent",
+  },
   icons: {
     icon: [
       {
@@ -41,7 +47,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: "dark",
-  themeColor: "#0b0f19",
+  themeColor: "#09090b",
 };
 
 export default function RootLayout({
